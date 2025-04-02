@@ -70,8 +70,34 @@ const App = () => {
     setFilteredSubscriptions(filtered);
   }, [subscriptions, searchQuery, filterCurrentMonth]);
 
+  // Global refresh function
   const handleRefreshSubscriptions = async () => {
     const updated = await Promise.all(subscriptions.map(async (sub) => {
+      const nextPaymentDate = parseDate(sub.nextPayment);
+      if (!isValid(nextPaymentDate)) return sub;
+      
+      const today = startOfDay(new Date());
+      if (differenceInDays(nextPaymentDate, today) < 0) {
+        const newLastPayment = nextPaymentDate;
+        const newNextPayment = startOfDay(addMonths(newLastPayment, 1));
+        return {
+          ...sub,
+          lastPayment: formatDate(newLastPayment),
+          nextPayment: formatDate(newNextPayment)
+        };
+      }
+      return sub;
+    }));
+    
+    setSubscriptions(updated);
+    await AsyncStorage.setItem("subscriptions", JSON.stringify(updated));
+  };
+
+  // Individual refresh function
+  const handleRefreshIndividualSubscription = async (index: number) => {
+    const updated = await Promise.all(subscriptions.map(async (sub, i) => {
+      if (i !== index) return sub;
+      
       const nextPaymentDate = parseDate(sub.nextPayment);
       if (!isValid(nextPaymentDate)) return sub;
       
@@ -248,6 +274,9 @@ const App = () => {
           <Button icon="pencil" onPress={() => handleModifySubscription(index)}>
             {language === "es" ? "Editar" : "Edit"}
           </Button>
+          <Button icon="refresh" onPress={() => handleRefreshIndividualSubscription(index)}>
+            {language === "es" ? "Actualizar" : "Refresh"}
+          </Button>
         </Card.Actions>
         <View style={{ alignItems: "center", padding: 10 }}>
           <View style={{
@@ -299,12 +328,13 @@ const App = () => {
                 </Picker>
               </View>
 
+              {/* Global refresh button */}
               <Button
                 mode="contained"
                 onPress={handleRefreshSubscriptions}
                 style={{ marginBottom: 10 }}
               >
-                {language === "es" ? "Actualizar Fechas" : "Refresh Dates"}
+                {language === "es" ? "Actualizar Todas" : "Refresh All"}
               </Button>
 
               <TextInput
