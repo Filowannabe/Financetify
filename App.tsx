@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, createContext, useContext, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,8 +6,9 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Alert,
+  StyleSheet,
 } from "react-native";
-import { Button, TextInput, Card, Snackbar } from "react-native-paper";
+import { Button, TextInput, Card, Snackbar, Icon, Provider as PaperProvider } from "react-native-paper";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -15,6 +16,8 @@ import { Picker } from "@react-native-picker/picker";
 import * as FileSystem from 'expo-file-system';
 import * as DocumentPicker from 'expo-document-picker';
 import { format, parse, differenceInDays, isThisMonth, addMonths, isValid, startOfDay } from 'date-fns';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
 type SubscriptionEntity = {
   name: string;
@@ -23,7 +26,158 @@ type SubscriptionEntity = {
   amount: number;
 };
 
-const App = () => {
+type Theme = {
+  name: string;
+  dark: boolean;
+  colors: {
+    primary: string;
+    background: string;
+    surface: string;
+    accent: string;
+    text: string;
+    subtitle: string;
+    cardBackground: string;
+    border: string;
+  };
+};
+
+type ThemeContextType = {
+  theme: Theme;
+  themes: Record<string, Theme>;
+  setTheme: (themeName: string) => void;
+};
+
+const Tab = createBottomTabNavigator();
+
+const defaultThemes = {
+  light: {
+    name: 'light',
+    dark: false,
+    colors: {
+      primary: '#6200ee',
+      background: '#f5f5f5',
+      surface: '#ffffff',
+      accent: '#03dac4',
+      text: '#000000',
+      subtitle: '#666666',
+      cardBackground: '#ffffff',
+      border: '#e0e0e0',
+    },
+  },
+  dark: {
+    name: 'dark',
+    dark: true,
+    colors: {
+      primary: '#bb86fc',
+      background: '#121212',
+      surface: '#1e1e1e',
+      accent: '#03dac4',
+      text: '#ffffff',
+      subtitle: '#a0a0a0',
+      cardBackground: '#2c2c2c',
+      border: '#404040',
+    },
+  },
+};
+
+const ThemeContext = createContext<ThemeContextType>({
+  theme: defaultThemes.light,
+  themes: defaultThemes,
+  setTheme: () => {},
+});
+
+const ThemeProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+  const [themeName, setThemeName] = useState<string>('light');
+  const [themes, setThemes] = useState<Record<string, Theme>>(defaultThemes);
+
+  useEffect(() => {
+    const loadTheme = async () => {
+      try {
+        const savedTheme = await AsyncStorage.getItem('selectedTheme');
+        if (savedTheme && themes[savedTheme]) {
+          setThemeName(savedTheme);
+        }
+      } catch (error) {
+        console.log('Error loading theme:', error);
+      }
+    };
+    loadTheme();
+  }, []);
+
+  const setTheme = useCallback(async (name: string) => {
+    if (themes[name]) {
+      setThemeName(name);
+      try {
+        await AsyncStorage.setItem('selectedTheme', name);
+      } catch (error) {
+        console.log('Error saving theme:', error);
+      }
+    }
+  }, [themes]);
+
+  return (
+    <ThemeContext.Provider value={{ theme: themes[themeName], themes, setTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
+const useTheme = () => useContext(ThemeContext);
+
+const HomeScreen = () => {
+  const { theme } = useTheme();
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Text style={[styles.title, { color: theme.colors.text }]}>📱 Subscription Manager</Text>
+      <Icon source="rocket" size={40} color={theme.colors.primary} />
+      <Text style={[styles.subtitle, { color: theme.colors.subtitle }]}>
+        Manage all your subscriptions in one place!
+      </Text>
+    </View>
+  );
+};
+
+const SettingsScreen = () => {
+  const { theme, themes, setTheme } = useTheme();
+  
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Text style={[styles.settingsTitle, { color: theme.colors.text }]}>
+        Select Theme
+      </Text>
+      {Object.values(themes).map((t) => (
+        <Card
+          key={t.name}
+          style={[
+            styles.themeCard,
+            { 
+              backgroundColor: theme.colors.cardBackground,
+              borderColor: theme.colors.border 
+            }
+          ]}
+        >
+          <Card.Content>
+            <View style={styles.themeContent}>
+              <View style={[styles.colorPreview, { backgroundColor: t.colors.primary }]} />
+              <Text style={{ color: theme.colors.text }}>{t.name}</Text>
+            </View>
+          </Card.Content>
+          <Card.Actions>
+            <Button
+              mode={theme.name === t.name ? 'contained' : 'outlined'}
+              onPress={() => setTheme(t.name)}
+            >
+              {theme.name === t.name ? 'Selected' : 'Select'}
+            </Button>
+          </Card.Actions>
+        </Card>
+      ))}
+    </View>
+  );
+};
+
+const SubscriptionsScreen = () => {
+  const { theme } = useTheme();
   const [name, setName] = useState("");
   const [lastPayment, setLastPayment] = useState(new Date());
   const [amount, setAmount] = useState(0);
@@ -204,7 +358,7 @@ const App = () => {
 
   const importFromCSV = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
+      const result:any = await DocumentPicker.getDocumentAsync({
         type: ["text/csv"],
         copyToCacheDirectory: true
       });
@@ -252,7 +406,7 @@ const App = () => {
     const isCurrent = isValid(nextPaymentDate) && isThisMonth(nextPaymentDate);
     const daysRemaining = calculateDaysRemaining(item.nextPayment);
     
-    let bgColor = "#000000";
+    let bgColor = theme.colors.primary;
     if (isCurrent) {
       bgColor = daysRemaining > 20 ? "#4CAF50" :
                 daysRemaining > 5 ? "#FF9800" : 
@@ -260,12 +414,12 @@ const App = () => {
     }
 
     return (
-      <Card style={{ marginBottom: 15 }}>
+      <Card style={{ marginBottom: 15, backgroundColor: theme.colors.cardBackground }}>
         <Card.Content>
-          <Text style={{ fontSize: 18, fontWeight: "bold" }}>{item.name}</Text>
-          <Text>{`${language === "es" ? "Último pago:" : "Last Payment:"} ${item.lastPayment}`}</Text>
-          <Text>{`${language === "es" ? "Próximo pago:" : "Next Payment:"} ${item.nextPayment}`}</Text>
-          <Text>{`${language === "es" ? "Monto:" : "Amount:"} ${formatAmount(item.amount)}`}</Text>
+          <Text style={{ fontSize: 18, fontWeight: "bold", color: theme.colors.text }}>{item.name}</Text>
+          <Text style={{ color: theme.colors.subtitle }}>{`${language === "es" ? "Último pago:" : "Last Payment:"} ${item.lastPayment}`}</Text>
+          <Text style={{ color: theme.colors.subtitle }}>{`${language === "es" ? "Próximo pago:" : "Next Payment:"} ${item.nextPayment}`}</Text>
+          <Text style={{ color: theme.colors.subtitle }}>{`${language === "es" ? "Monto:" : "Amount:"} ${formatAmount(item.amount)}`}</Text>
         </Card.Content>
         <Card.Actions>
           <Button icon="delete" onPress={() => handleDeleteSubscription(index)}>
@@ -287,7 +441,7 @@ const App = () => {
             justifyContent: "center",
             alignItems: "center",
             borderWidth: isCurrent ? 0 : 2,
-            borderColor: "#FFFFFF"
+            borderColor: theme.colors.border
           }}>
             <Text style={{ color: "white", fontWeight: "bold", fontSize: 20 }}>
               {Math.abs(daysRemaining)}
@@ -304,153 +458,231 @@ const App = () => {
   };
 
   return (
-    <SafeAreaProvider>
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={{ flex: 1, padding: 20 }}>
-          {!isMinimized && (
-            <>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 10 }}>
-                <Picker
-                  selectedValue={language}
-                  onValueChange={setLanguage}
-                  style={{ flex: 1, marginRight: 10 }}
-                >
-                  <Picker.Item label="Español" value="es" />
-                  <Picker.Item label="English" value="en" />
-                </Picker>
-
-                <Picker
-                  selectedValue={region}
-                  onValueChange={setRegion}
-                  style={{ flex: 1 }}
-                >
-                  <Picker.Item label="Colombia" value="CO" />
-                </Picker>
-              </View>
-
-              {/* Global refresh button */}
-              <Button
-                mode="contained"
-                onPress={handleRefreshSubscriptions}
-                style={{ marginBottom: 10 }}
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={{ flex: 1, padding: 20, backgroundColor: theme.colors.background }}>
+        {!isMinimized && (
+          <>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 10 }}>
+              <Picker
+                selectedValue={language}
+                onValueChange={setLanguage}
+                style={{ flex: 1, marginRight: 10, backgroundColor: theme.colors.surface }}
+                dropdownIconColor={theme.colors.text}
               >
-                {language === "es" ? "Actualizar Todas" : "Refresh All"}
-              </Button>
+                <Picker.Item label="Español" value="es" color={theme.colors.text} />
+                <Picker.Item label="English" value="en" color={theme.colors.text} />
+              </Picker>
 
-              <TextInput
-                label={language === "es" ? "Buscar suscripciones" : "Search subscriptions"}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                style={{ marginBottom: 10 }}
-              />
-
-              <Button
-                mode="outlined"
-                onPress={() => setFilterCurrentMonth(!filterCurrentMonth)}
-                style={{ marginBottom: 10 }}
+              <Picker
+                selectedValue={region}
+                onValueChange={setRegion}
+                style={{ flex: 1, backgroundColor: theme.colors.surface }}
+                dropdownIconColor={theme.colors.text}
               >
-                {filterCurrentMonth 
-                  ? (language === "es" ? "Mostrar todas" : "Show all") 
-                  : (language === "es" ? "Filtrar mes actual" : "Filter current month")}
-              </Button>
+                <Picker.Item label="Colombia" value="CO" color={theme.colors.text} />
+              </Picker>
+            </View>
 
-              <View style={{ marginBottom: 20 }}>
-                <Text style={{ fontWeight: "bold", fontSize: 18 }}>
-                  {language === "es" ? "Total este mes:" : "Current month:"} {formatAmount(currentMonthTotal)}
-                </Text>
-                <Text style={{ fontWeight: "bold", fontSize: 18 }}>
-                  {language === "es" ? "Total general:" : "Total amount:"} {formatAmount(total)}
-                </Text>
-              </View>
+            <Button
+              mode="contained"
+              onPress={handleRefreshSubscriptions}
+              style={{ marginBottom: 10 }}
+              labelStyle={{ color: theme.colors.text }}
+            >
+              {language === "es" ? "Actualizar Todas" : "Refresh All"}
+            </Button>
 
-              <TextInput
-                label={language === "es" ? "Nombre de suscripción" : "Subscription name"}
-                value={name}
-                onChangeText={setName}
-                style={{ marginBottom: 10 }}
-              />
+            <TextInput
+              label={language === "es" ? "Buscar suscripciones" : "Search subscriptions"}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={{ marginBottom: 10 }}
+              theme={{ colors: { text: theme.colors.text } }}
+            />
 
-              <TextInput
-                label={language === "es" ? "Monto mensual" : "Monthly amount"}
-                value={amount.toString()}
-                keyboardType="numeric"
-                onChangeText={(text) => setAmount(Number(text) || 0)}
-                style={{ marginBottom: 10 }}
-              />
+            <Button
+              mode="outlined"
+              onPress={() => setFilterCurrentMonth(!filterCurrentMonth)}
+              style={{ marginBottom: 10 }}
+              labelStyle={{ color: theme.colors.text }}
+            >
+              {filterCurrentMonth 
+                ? (language === "es" ? "Mostrar todas" : "Show all") 
+                : (language === "es" ? "Filtrar mes actual" : "Filter current month")}
+            </Button>
 
-              <Button
-                mode="contained"
-                onPress={() => setShowDatePicker(true)}
-                style={{ marginBottom: 10 }}
-              >
-                {language === "es" ? "Seleccionar fecha" : "Select date"}
-              </Button>
-
-              <Text style={{ marginBottom: 10 }}>
-                {language === "es" ? "Fecha seleccionada:" : "Selected date:"} {formatDate(lastPayment)}
+            <View style={{ marginBottom: 20 }}>
+              <Text style={{ fontWeight: "bold", fontSize: 18, color: theme.colors.text }}>
+                {language === "es" ? "Total este mes:" : "Current month:"} {formatAmount(currentMonthTotal)}
               </Text>
+              <Text style={{ fontWeight: "bold", fontSize: 18, color: theme.colors.text }}>
+                {language === "es" ? "Total general:" : "Total amount:"} {formatAmount(total)}
+              </Text>
+            </View>
 
-              {showDatePicker && (
-                <DateTimePicker
-                  value={lastPayment}
-                  mode="date"
-                  display="default"
-                  onChange={(_, date) => {
-                    setShowDatePicker(false);
-                    date && setLastPayment(date);
-                  }}
-                />
-              )}
+            <TextInput
+              label={language === "es" ? "Nombre de suscripción" : "Subscription name"}
+              value={name}
+              onChangeText={setName}
+              style={{ marginBottom: 10 }}
+              theme={{ colors: { text: theme.colors.text } }}
+            />
 
-              <Button
-                mode="contained"
-                onPress={handleAddOrUpdateSubscription}
-                style={{ marginVertical: 10 }}
-              >
-                {isUpdating 
-                  ? (language === "es" ? "Actualizar" : "Update") 
-                  : (language === "es" ? "Agregar" : "Add")}
+            <TextInput
+              label={language === "es" ? "Monto mensual" : "Monthly amount"}
+              value={amount.toString()}
+              keyboardType="numeric"
+              onChangeText={(text) => setAmount(Number(text) || 0)}
+              style={{ marginBottom: 10 }}
+              theme={{ colors: { text: theme.colors.text } }}
+            />
+
+            <Button
+              mode="contained"
+              onPress={() => setShowDatePicker(true)}
+              style={{ marginBottom: 10 }}
+              labelStyle={{ color: theme.colors.text }}
+            >
+              {language === "es" ? "Seleccionar fecha" : "Select date"}
+            </Button>
+
+            <Text style={{ marginBottom: 10, color: theme.colors.text }}>
+              {language === "es" ? "Fecha seleccionada:" : "Selected date:"} {formatDate(lastPayment)}
+            </Text>
+
+            {showDatePicker && (
+              <DateTimePicker
+                value={lastPayment}
+                mode="date"
+                display="default"
+                onChange={(_, date) => {
+                  setShowDatePicker(false);
+                  date && setLastPayment(date);
+                }}
+              />
+            )}
+
+            <Button
+              mode="contained"
+              onPress={handleAddOrUpdateSubscription}
+              style={{ marginVertical: 10 }}
+              labelStyle={{ color: theme.colors.text }}
+            >
+              {isUpdating 
+                ? (language === "es" ? "Actualizar" : "Update") 
+                : (language === "es" ? "Agregar" : "Add")}
+            </Button>
+
+            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+              <Button mode="contained" onPress={exportToCSV} labelStyle={{ color: theme.colors.text }}>
+                {language === "es" ? "Exportar CSV" : "Export CSV"}
               </Button>
+              <Button mode="contained" onPress={importFromCSV} labelStyle={{ color: theme.colors.text }}>
+                {language === "es" ? "Importar CSV" : "Import CSV"}
+              </Button>
+            </View>
+          </>
+        )}
 
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Button mode="contained" onPress={exportToCSV}>
-                  {language === "es" ? "Exportar CSV" : "Export CSV"}
-                </Button>
-                <Button mode="contained" onPress={importFromCSV}>
-                  {language === "es" ? "Importar CSV" : "Import CSV"}
-                </Button>
-              </View>
-            </>
-          )}
+        <Button
+          mode="text"
+          onPress={() => setIsMinimized(!isMinimized)}
+          style={{ marginVertical: 10 }}
+          labelStyle={{ color: theme.colors.text }}
+        >
+          {isMinimized 
+            ? (language === "es" ? "▲ Mostrar formulario" : "▲ Show form") 
+            : (language === "es" ? "▼ Ocultar formulario" : "▼ Hide form")}
+        </Button>
 
-          <Button
-            mode="text"
-            onPress={() => setIsMinimized(!isMinimized)}
-            style={{ marginVertical: 10 }}
-          >
-            {isMinimized 
-              ? (language === "es" ? "▲ Mostrar formulario" : "▲ Show form") 
-              : (language === "es" ? "▼ Ocultar formulario" : "▼ Hide form")}
-          </Button>
+        <FlatList
+          data={filteredSubscriptions}
+          renderItem={renderSubscriptionItem}
+          keyExtractor={(_, index) => index.toString()}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        />
 
-          <FlatList
-            data={filteredSubscriptions}
-            renderItem={renderSubscriptionItem}
-            keyExtractor={(_, index) => index.toString()}
-            contentContainerStyle={{ paddingBottom: 20 }}
-          />
-
-          <Snackbar
-            visible={visibleSnackbar}
-            onDismiss={() => setVisibleSnackbar(false)}
-            duration={3000}
-          >
-            {snackbarMessage}
-          </Snackbar>
-        </View>
-      </TouchableWithoutFeedback>
-    </SafeAreaProvider>
+        <Snackbar
+          visible={visibleSnackbar}
+          onDismiss={() => setVisibleSnackbar(false)}
+          duration={3000}
+          style={{ backgroundColor: theme.colors.primary }}
+        >
+          <Text style={{ color: theme.colors.text }}>{snackbarMessage}</Text>
+        </Snackbar>
+      </View>
+    </TouchableWithoutFeedback>
   );
 };
 
-export default App;
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <PaperProvider>
+          <NavigationContainer>
+            <Tab.Navigator
+              screenOptions={({ route }) => ({
+                tabBarIcon: ({ focused, color, size }) => {
+                  let iconName: string;
+                  switch (route.name) {
+                    case 'Home': iconName = focused ? 'home' : 'home-outline'; break;
+                    case 'Subscriptions': iconName = focused ? 'format-list-bulleted' : 'format-list-bulleted'; break;
+                    case 'Settings': iconName = focused ? 'cog' : 'cog-outline'; break;
+                    default: iconName = 'alert';
+                  }
+                  return <Icon source={iconName} color={color} size={size} />;
+                },
+                tabBarActiveTintColor: '#6200ee',
+                tabBarInactiveTintColor: 'gray',
+                tabBarStyle: { paddingBottom: 5, height: 60 },
+              })}
+            >
+              <Tab.Screen name="Home" component={HomeScreen} />
+              <Tab.Screen name="Subscriptions" component={SubscriptionsScreen} />
+              <Tab.Screen name="Settings" component={SettingsScreen} />
+            </Tab.Navigator>
+          </NavigationContainer>
+        </PaperProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  subtitle: {
+    marginTop: 20,
+    fontSize: 16,
+  },
+  settingsTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 30,
+  },
+  themeCard: {
+    marginBottom: 15,
+    width: '100%',
+    borderWidth: 1,
+  },
+  themeContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+  },
+  colorPreview: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+});
