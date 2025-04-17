@@ -6,16 +6,22 @@ import { ThemeProvider } from "./src/themes/index";
 import React from "react";
 import { IncomesCalculator } from "./src/IncomesCalculator";
 import { SettingsProvider } from "./src/settings";
+import "react-native-gesture-handler";
+import { enableScreens } from "react-native-screens";
+import { SubscriptionProvider } from "./src/views/Subscriptions/SubscriptionContext";
 
+enableScreens();
 export default function App() {
   return (
     <SettingsProvider>
       <ThemeProvider>
         <SafeAreaProvider>
           <PaperProvider>
-            <NavigationContainer>
-              <IncomesCalculator />
-            </NavigationContainer>
+            <SubscriptionProvider>
+              <NavigationContainer>
+                <IncomesCalculator />
+              </NavigationContainer>
+            </SubscriptionProvider>
           </PaperProvider>
         </SafeAreaProvider>
       </ThemeProvider>

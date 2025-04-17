@@ -5,7 +5,17 @@ import { HomeScreen } from "./views/Home/HomeScreen";
 import { SubscriptionsScreen } from "./views/Subscriptions/SubscriptionsScreen";
 import { SettingsScreen } from "./views/Settings/SettingsScreen";
 import { useAppTheme } from "./themes";
+import { createStackNavigator } from "@react-navigation/stack";
+import { ListScreen } from "./views/Subscriptions/ListScreen";
+import { FormScreen } from "./views/Subscriptions/FormScreen";
+const SubscriptionStack = createStackNavigator();
 
+const SubscriptionNavigator = () => (
+  <SubscriptionStack.Navigator>
+    <SubscriptionStack.Screen name="List" component={ListScreen} />
+    <SubscriptionStack.Screen name="Form" component={FormScreen} />
+  </SubscriptionStack.Navigator>
+);
 const Tab = createBottomTabNavigator();
 
 export const IncomesCalculator = () => {
@@ -21,7 +31,9 @@ export const IncomesCalculator = () => {
               iconName = focused ? "home" : "home-outline";
               break;
             case "Subscriptions":
-              iconName = focused ? "format-list-bulleted" : "format-list-bulleted";
+              iconName = focused
+                ? "format-list-bulleted"
+                : "format-list-bulleted";
               break;
             case "Settings":
               iconName = focused ? "cog" : "cog-outline";
@@ -33,11 +45,11 @@ export const IncomesCalculator = () => {
         },
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.subtitle,
-        tabBarStyle: { 
+        tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
-          paddingBottom: 5, 
-          height: 60 
+          paddingBottom: 5,
+          height: 60,
         },
         headerStyle: {
           backgroundColor: theme.colors.surface,
@@ -47,20 +59,25 @@ export const IncomesCalculator = () => {
         },
       })}
     >
-      <Tab.Screen 
-        name="Home" 
-        component={HomeScreen} 
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
         options={{ title: "Home" }}
       />
-      <Tab.Screen 
-        name="Subscriptions" 
-        component={SubscriptionsScreen} 
+      <Tab.Screen
+        name="Subscriptions"
+        component={SubscriptionsScreen}
         options={{ title: "Subscriptions" }}
       />
-      <Tab.Screen 
-        name="Settings" 
-        component={SettingsScreen} 
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
         options={{ title: "Settings" }}
+      />
+      <Tab.Screen
+        name="Subscriptions2"
+        component={SubscriptionNavigator}
+        options={{ headerShown: false }}
       />
     </Tab.Navigator>
   );
