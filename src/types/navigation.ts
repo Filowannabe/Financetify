@@ -4,7 +4,7 @@ import type {
 } from "@react-navigation/native";
 import type { SubscriptionEntity } from "./SubscriptionTypes"; // ajusta si tu ruta es distinta
 
-// ░▒▓ STACK (Subscriptions2) ▓▒░
+// ░▒▓ STACK (SubscriptionsList) ▓▒░
 export type AppStackParamList = {
   List: { defaultToFirebase: boolean } | undefined;
   Form: {
@@ -12,14 +12,14 @@ export type AppStackParamList = {
     subscription?: SubscriptionEntity;
     fromFirebase?: boolean;
   };
-  Subscriptions2: undefined; // se usa para navegar directo al Tab si hicieras un redirect
+  SubscriptionsList: undefined; // se usa para navegar directo al Tab si hicieras un redirect
 };
 
 // ░▒▓ TABS ▓▒░
 export type RootTabParamList = {
   Home: undefined;
   SubscriptionsForm: undefined;
-  Subscriptions2: NavigatorScreenParams<AppStackParamList>;
+  SubscriptionsList: NavigatorScreenParams<AppStackParamList>;
   Settings: undefined;
 };
 
@@ -39,5 +39,5 @@ export type TabNavigation<T extends keyof RootTabParamList> = {
   navigation: NavigationProp<RootTabParamList, T>;
 };
 
-// 👉 Para navegación general dentro de Tabs (como desde FormScreen a Subscriptions2)
+// 👉 Para navegación general dentro de Tabs (como desde FormScreen a SubscriptionsList)
 export type RootNavigation = NavigationProp<RootTabParamList>;

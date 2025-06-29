@@ -9,7 +9,7 @@ import { ListScreen } from "./views/Subscriptions/ListScreen";
 import { FormScreen } from "./views/Subscriptions/FormScreen";
 import type { AppStackParamList, RootTabParamList } from "./types/navigation";
 
-// Typed stack navigator
+// ░▒▓ Stack para SubscriptionsList ▓▒░
 const SubscriptionStack = createStackNavigator<AppStackParamList>();
 
 const SubscriptionNavigator = () => {
@@ -19,20 +19,29 @@ const SubscriptionNavigator = () => {
       screenOptions={{
         headerStyle: {
           backgroundColor: theme.colors.surface,
-          height:0
         },
+        headerTintColor: theme.colors.text,
         headerTitleStyle: {
           color: theme.colors.text,
         },
+        headerTitleAlign: "center",
       }}
     >
-      <SubscriptionStack.Screen name="List" component={ListScreen} />
-      <SubscriptionStack.Screen name="Form" component={FormScreen} />
+      <SubscriptionStack.Screen
+        name="List"
+        component={ListScreen}
+        options={{ title: "Subscriptions" }}
+      />
+      <SubscriptionStack.Screen
+        name="Form"
+        component={FormScreen}
+        options={{ title: "Edit" }}
+      />
     </SubscriptionStack.Navigator>
   );
 };
 
-// Typed tab navigator
+// ░▒▓ Bottom Tabs ▓▒░
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
 export const IncomesCalculator = () => {
@@ -50,16 +59,16 @@ export const IncomesCalculator = () => {
             case "SubscriptionsForm":
               iconName = focused ? "plus-circle" : "plus-circle-outline";
               break;
-            case "Settings":
-              iconName = focused ? "cog" : "cog-outline";
-              break;
-            case "Subscriptions2":
+            case "SubscriptionsList":
               iconName = focused
                 ? "format-list-bulleted"
                 : "format-list-bulleted";
               break;
+            case "Settings":
+              iconName = focused ? "cog" : "cog-outline";
+              break;
             default:
-              iconName = "alert";
+              iconName = "alert-circle-outline";
           }
           return <Icon source={iconName} color={color} size={size} />;
         },
@@ -90,9 +99,12 @@ export const IncomesCalculator = () => {
         options={{ title: "Create Subscription" }}
       />
       <Tab.Screen
-        name="Subscriptions2"
+        name="SubscriptionsList"
         component={SubscriptionNavigator}
-        options={{ title: "Subscriptions" }}
+        options={{
+          title: "Subscriptions",
+          headerShown: false, // importante para que el stack controle el header
+        }}
       />
       <Tab.Screen
         name="Settings"

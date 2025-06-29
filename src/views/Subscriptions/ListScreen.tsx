@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   FlatList,
@@ -17,6 +17,7 @@ import {
   isValid,
   startOfDay,
 } from "date-fns";
+import { useFocusEffect } from "@react-navigation/native"; // 👈 NUEVO
 import { SubscriptionEntity } from "../../types/SubscriptionTypes";
 import { useAppTheme } from "../../themes";
 import { useSettings } from "../../settings";
@@ -58,6 +59,17 @@ export const ListScreen = ({ navigation, route }: any) => {
   const dateFormat = region === "CO" ? "dd/MM/yyyy" : "MM/dd/yyyy";
   const parseDate = (dateString: string) =>
     startOfDay(parse(dateString, dateFormat, new Date()));
+
+  /* 🔄  Refrescar Firebase cada vez que la pantalla gana foco */
+  useFocusEffect(
+    useCallback(() => {
+      if (showFirebaseData) {
+        // vuelve a traer siempre la lista más reciente
+        loadSubscriptionsFromFirebase();
+      }
+    }, [showFirebaseData])
+  );
+
   useEffect(() => {
     if (route.params?.defaultToFirebase !== undefined) {
       setShowFirebaseData(route.params.defaultToFirebase);
@@ -220,7 +232,7 @@ export const ListScreen = ({ navigation, route }: any) => {
 
   // Original modify function
   const handleModifySubscription = (index: number) => {
-    navigation.navigate("Subscriptions2", {
+    navigation.navigate("SubscriptionsList", {
       screen: "Form",
       params: {
         subscription: showFirebaseData

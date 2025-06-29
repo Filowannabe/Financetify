@@ -122,7 +122,7 @@ export const FormScreen = ({ route }: FormScreenProps) => {
         }
 
         resetForm(); // 👈 limpia
-        navigation.navigate("Subscriptions2", {
+        navigation.navigate("SubscriptionsList", {
           screen: "List",
           params: { defaultToFirebase: saveToFirebase },
         });
@@ -140,7 +140,7 @@ export const FormScreen = ({ route }: FormScreenProps) => {
 
       resetForm(); // 👈 limpia
 
-      navigation.navigate("Subscriptions2", {
+      navigation.navigate("SubscriptionsList", {
         screen: "List",
         params: { defaultToFirebase: saveToFirebase },
       });
