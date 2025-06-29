@@ -1,3 +1,4 @@
+// src/screens/subscriptions/FormScreen.tsx
 import React, { useState } from "react";
 import { View, TouchableWithoutFeedback, Keyboard, Alert } from "react-native";
 import { Button, TextInput, Snackbar, Text } from "react-native-paper";
@@ -10,35 +11,66 @@ import { useAppTheme } from "../../themes";
 import { useSettings } from "../../settings";
 import { useSubscriptions } from "./SubscriptionContext";
 import { SubscriptionEntity } from "../../types/SubscriptionTypes";
-import { AppStackNavigation } from "../../types/navigation";
+import { RootNavigation } from "../../types/navigation";
 
+/* ────────────────────────────────────────────────
+   Tipos de navegación
+───────────────────────────────────────────────── */
 interface RouteParams {
   index?: number;
   subscription?: SubscriptionEntity;
+  fromFirebase?: boolean; // ← indica si proviene de Firestore
 }
 
 interface FormScreenProps {
-  route: {
-    params?: RouteParams;
-  };
+  route: { params?: RouteParams };
 }
 
+/* ────────────────────────────────────────────────
+   Componente
+───────────────────────────────────────────────── */
 export const FormScreen = ({ route }: FormScreenProps) => {
+  /* ==== Hooks & contexto ================================================= */
+
   const { theme } = useAppTheme();
   const { language, region } = useSettings();
-  const navigation = useNavigation<AppStackNavigation<"Form">["navigation"]>();
+
+  const navigation = useNavigation<RootNavigation>();
+  const resetForm = () => {
+    setName("");
+    setAmount("");
+    setLastPayment(startOfDay(new Date()));
+    setSaveToFirebase(false); // vuelve al valor por defecto
+  };
+
   const {
+    /* Local */
     subscriptions,
     addSubscription,
     updateSubscription,
+
+    /* Firebase */
+    firebaseSubscriptions,
+    updateSubscriptionFirebase,
+    saveSubscriptionsToFirebase,
+    loadSubscriptionsFromFirebase,
+
+    /* Util */
     forceReloadSubscriptions,
   } = useSubscriptions();
 
-  // Date format moved before initial state declarations
-  const dateFormat = region === "CO" ? "dd/MM/yyyy" : "MM/dd/yyyy";
-  const formatDate = (date: Date) => format(startOfDay(date), dateFormat);
+  /* ==== Variables de modo =============================================== */
 
-  // Fixed state initialization with startOfDay
+  const isEdit = route.params?.index !== undefined;
+  const isFromFirebase = route.params?.fromFirebase === true;
+
+  /* ==== Formato de fecha ================================================= */
+
+  const dateFormat = region === "CO" ? "dd/MM/yyyy" : "MM/dd/yyyy";
+  const formatDate = (d: Date) => format(startOfDay(d), dateFormat);
+
+  /* ==== Estado del formulario =========================================== */
+
   const [lastPayment, setLastPayment] = useState(
     route.params?.subscription
       ? startOfDay(
@@ -49,12 +81,19 @@ export const FormScreen = ({ route }: FormScreenProps) => {
 
   const [name, setName] = useState(route.params?.subscription?.name || "");
   const [amount, setAmount] = useState(
-    route.params?.subscription?.amount.toString() || ""
+    route.params?.subscription?.amount?.toString() || ""
   );
+
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [visibleSnackbar, setVisibleSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
 
+  /* Selector para nuevas suscripciones (por defecto respeta origen) */
+  const [saveToFirebase, setSaveToFirebase] = useState(isFromFirebase);
+
+  /* ────────────────────────────────────────────────────────────────────────
+     Submit
+  ──────────────────────────────────────────────────────────────────────── */
   const handleSubmit = async () => {
     if (!name || !amount || parseFloat(amount) <= 0) {
       setSnackbarMessage(
@@ -64,44 +103,71 @@ export const FormScreen = ({ route }: FormScreenProps) => {
       return;
     }
 
-    try {
-      const subscription = {
-        name,
-        lastPayment: formatDate(lastPayment),
-        nextPayment: formatDate(addMonths(lastPayment, 1)),
-        amount: parseFloat(amount),
-      };
+    const subscription: SubscriptionEntity = {
+      name,
+      lastPayment: formatDate(lastPayment),
+      nextPayment: formatDate(addMonths(lastPayment, 1)),
+      amount: parseFloat(amount),
+    };
 
-      if (route.params?.index !== undefined) {
-        await updateSubscription(route.params.index, subscription);
-        await forceReloadSubscriptions(null);
-        navigation.navigate("List");
+    try {
+      /* ===== EDICIÓN ===== */
+      if (isEdit && route.params?.index !== undefined) {
+        if (isFromFirebase) {
+          await updateSubscriptionFirebase(route.params.index, subscription);
+          await loadSubscriptionsFromFirebase();
+        } else {
+          await updateSubscription(route.params.index, subscription);
+          await forceReloadSubscriptions(null);
+        }
+
+        resetForm(); // 👈 limpia
+        navigation.navigate("Subscriptions2", {
+          screen: "List",
+          params: { defaultToFirebase: saveToFirebase },
+        });
+
+        return;
+      }
+
+      /* ===== NUEVA ===== */
+      if (saveToFirebase) {
+        const updated = [...firebaseSubscriptions, subscription];
+        await saveSubscriptionsToFirebase(updated);
       } else {
         await addSubscription(subscription);
-        await forceReloadSubscriptions(null);
-        navigation.navigate("Subscriptions2");
       }
-    } catch (error) {
+
+      resetForm(); // 👈 limpia
+
+      navigation.navigate("Subscriptions2", {
+        screen: "List",
+        params: { defaultToFirebase: saveToFirebase },
+      });
+    } catch (err) {
       setSnackbarMessage(language === "es" ? "Error al guardar" : "Save error");
       setVisibleSnackbar(true);
     }
   };
 
+  /* ────────────────────────────────────────────────────────────────────────
+     Exportar / Importar CSV (sin cambios)
+  ──────────────────────────────────────────────────────────────────────── */
   const exportToCSV = async () => {
     try {
       const csvContent = [
         '"Name","Last Payment","Next Payment","Amount"',
         ...subscriptions.map(
-          (sub: SubscriptionEntity) =>
+          (sub) =>
             `"${sub.name}","${sub.lastPayment}","${sub.nextPayment}",${sub.amount}`
         ),
       ].join("\n");
 
-      const permissions =
+      const perms =
         await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
-      if (permissions.granted) {
+      if (perms.granted) {
         const uri = await FileSystem.StorageAccessFramework.createFileAsync(
-          permissions.directoryUri,
+          perms.directoryUri,
           `Subscriptions_${format(new Date(), "yyyyMMdd_HHmmss")}`,
           "text/csv"
         );
@@ -111,7 +177,7 @@ export const FormScreen = ({ route }: FormScreenProps) => {
           language === "es" ? "Exportado correctamente" : "Export successful"
         );
       }
-    } catch (error) {
+    } catch {
       Alert.alert(
         "Error",
         language === "es" ? "Error al exportar" : "Export failed"
@@ -125,39 +191,31 @@ export const FormScreen = ({ route }: FormScreenProps) => {
         type: ["text/csv"],
         copyToCacheDirectory: true,
       });
-
       if (result.type === "success") {
         const csv = await FileSystem.readAsStringAsync(result.uri);
-        const newSubscriptions = csv
+        const newSubs = csv
           .split("\n")
           .slice(1)
-          .reduce((acc: SubscriptionEntity[], line) => {
-            const [name, lastPayment, nextPayment, amount] = line
-              .replace(/"/g, "")
-              .split(",");
-            if (name && lastPayment && nextPayment && amount) {
+          .reduce<SubscriptionEntity[]>((acc, line) => {
+            const [n, lp, np, amt] = line.replace(/"/g, "").split(",");
+            if (n && lp && np && amt)
               acc.push({
-                name: name.trim(),
-                lastPayment: lastPayment.trim(),
-                nextPayment: nextPayment.trim(),
-                amount: parseFloat(amount.trim()),
+                name: n.trim(),
+                lastPayment: lp.trim(),
+                nextPayment: np.trim(),
+                amount: parseFloat(amt.trim()),
               });
-            }
             return acc;
           }, []);
-
-        for (const sub of newSubscriptions) {
-          await addSubscription(sub);
-        }
-
+        for (const s of newSubs) await addSubscription(s);
         Alert.alert(
           "Success",
           language === "es"
-            ? `Importadas ${newSubscriptions.length} suscripciones`
-            : `Imported ${newSubscriptions.length} subscriptions`
+            ? `Importadas ${newSubs.length} suscripciones`
+            : `Imported ${newSubs.length} subscriptions`
         );
       }
-    } catch (error) {
+    } catch {
       Alert.alert(
         "Error",
         language === "es" ? "Error al importar" : "Import failed"
@@ -165,6 +223,9 @@ export const FormScreen = ({ route }: FormScreenProps) => {
     }
   };
 
+  /* ────────────────────────────────────────────────────────────────────────
+     UI
+  ──────────────────────────────────────────────────────────────────────── */
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View
@@ -174,6 +235,7 @@ export const FormScreen = ({ route }: FormScreenProps) => {
           backgroundColor: theme.colors.background,
         }}
       >
+        {/* Nombre */}
         <TextInput
           label={
             language === "es" ? "Nombre de suscripción" : "Subscription name"
@@ -184,15 +246,17 @@ export const FormScreen = ({ route }: FormScreenProps) => {
           theme={{ colors: { text: theme.colors.text } }}
         />
 
+        {/* Monto */}
         <TextInput
           label={language === "es" ? "Monto mensual" : "Monthly amount"}
           value={amount}
           keyboardType="numeric"
-          onChangeText={(text) => setAmount(text.replace(/[^0-9.]/g, ""))}
+          onChangeText={(txt) => setAmount(txt.replace(/[^0-9.]/g, ""))}
           style={{ marginBottom: 10 }}
           theme={{ colors: { text: theme.colors.text } }}
         />
 
+        {/* Fecha */}
         <Button
           mode="outlined"
           onPress={() => setShowDatePicker(true)}
@@ -220,20 +284,59 @@ export const FormScreen = ({ route }: FormScreenProps) => {
             display="default"
             onChange={(_, date) => {
               setShowDatePicker(false);
-              date && setLastPayment(startOfDay(date));
+              if (date) setLastPayment(startOfDay(date));
             }}
           />
         )}
 
+        {/* Selector de destino (solo visible en creación) */}
+        {!isEdit && (
+          <>
+            <Button
+              mode="outlined"
+              onPress={() => setSaveToFirebase(!saveToFirebase)}
+              style={{ marginBottom: 10 }}
+              labelStyle={{ color: theme.colors.text }}
+              icon={saveToFirebase ? "cloud" : "content-save"}
+            >
+              {saveToFirebase
+                ? language === "es"
+                  ? "Guardar en Firebase"
+                  : "Save to Firebase"
+                : language === "es"
+                ? "Guardar localmente"
+                : "Save locally"}
+            </Button>
+
+            <Text
+              style={{
+                marginBottom: 20,
+                color: saveToFirebase
+                  ? theme.colors.primary
+                  : theme.colors.text,
+                textAlign: "center",
+                fontWeight: "bold",
+              }}
+            >
+              {saveToFirebase
+                ? language === "es"
+                  ? "Guardando en Firebase ☁️"
+                  : "Saving to Firebase ☁️"
+                : language === "es"
+                ? "Guardando localmente 📱"
+                : "Saving locally 📱"}
+            </Text>
+          </>
+        )}
+
+        {/* Botón guardar / actualizar */}
         <Button
           mode="contained"
-          onPress={() => {
-            handleSubmit();
-          }}
+          onPress={handleSubmit}
           style={{ marginVertical: 10 }}
           labelStyle={{ color: theme.colors.text }}
         >
-          {route.params?.index !== undefined
+          {isEdit
             ? language === "es"
               ? "Actualizar"
               : "Update"
@@ -242,6 +345,7 @@ export const FormScreen = ({ route }: FormScreenProps) => {
             : "Add"}
         </Button>
 
+        {/* Export / Import */}
         <View
           style={{
             flexDirection: "row",
@@ -268,6 +372,7 @@ export const FormScreen = ({ route }: FormScreenProps) => {
           </Button>
         </View>
 
+        {/* Snackbar */}
         <Snackbar
           visible={visibleSnackbar}
           onDismiss={() => setVisibleSnackbar(false)}

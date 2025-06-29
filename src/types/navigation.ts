@@ -1,37 +1,43 @@
-import type { NavigatorScreenParams } from "@react-navigation/native";
+import type {
+  NavigatorScreenParams,
+  NavigationProp,
+} from "@react-navigation/native";
+import type { SubscriptionEntity } from "./SubscriptionTypes"; // ajusta si tu ruta es distinta
 
-// Define all stack navigator params
+// ░▒▓ STACK (Subscriptions2) ▓▒░
 export type AppStackParamList = {
-  List: undefined;
-  Form: undefined;
-  Subscriptions2: undefined;
+  List: { defaultToFirebase: boolean } | undefined;
+  Form: {
+    index?: number;
+    subscription?: SubscriptionEntity;
+    fromFirebase?: boolean;
+  };
+  Subscriptions2: undefined; // se usa para navegar directo al Tab si hicieras un redirect
 };
 
-// Define tab navigator params
+// ░▒▓ TABS ▓▒░
 export type RootTabParamList = {
   Home: undefined;
   SubscriptionsForm: undefined;
-  Subscriptions2: undefined;
+  Subscriptions2: NavigatorScreenParams<AppStackParamList>;
   Settings: undefined;
 };
 
-// Combined type for root navigation
+// ░▒▓ ROOT STACK (si tuvieras otra navegación raíz, opcional) ▓▒░
 export type RootStackParamList = {
   Tabs: NavigatorScreenParams<RootTabParamList>;
   AppStack: NavigatorScreenParams<AppStackParamList>;
 };
 
-// Type utilities
+// ░▒▓ HOOKS de navegación ▓▒░
+
 export type AppStackNavigation<T extends keyof AppStackParamList> = {
-  navigation: import("@react-navigation/native").NavigationProp<
-    AppStackParamList,
-    T
-  >;
+  navigation: NavigationProp<AppStackParamList, T>;
 };
 
 export type TabNavigation<T extends keyof RootTabParamList> = {
-  navigation: import("@react-navigation/native").NavigationProp<
-    RootTabParamList,
-    T
-  >;
+  navigation: NavigationProp<RootTabParamList, T>;
 };
+
+// 👉 Para navegación general dentro de Tabs (como desde FormScreen a Subscriptions2)
+export type RootNavigation = NavigationProp<RootTabParamList>;

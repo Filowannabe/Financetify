@@ -15,40 +15,69 @@ import {
   format,
 } from "date-fns";
 import { SubscriptionEntity } from "../../types/SubscriptionTypes";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { db } from "../../firebase/firebaseConfig";
 
-// -------------------------
-// Type Definitions
-// -------------------------
-type SubscriptionContextType = {
+/* ──────────────────────────────────────────────────────────
+   Constantes
+─────────────────────────────────────────────────────────── */
+const FIREBASE_COLLECTION = "subscriptions";
+const FIREBASE_DOCUMENT_ID = "user_subscriptions_data";
+
+/* ──────────────────────────────────────────────────────────
+   Tipado del contexto
+─────────────────────────────────────────────────────────── */
+export interface SubscriptionContextType {
+  /* Local (AsyncStorage) */
   subscriptions: SubscriptionEntity[];
-  addSubscription: (sub: SubscriptionEntity) => Promise<void>;
-  updateSubscription: (index: number, sub: SubscriptionEntity) => Promise<void>;
-  deleteSubscription: (index: number) => Promise<void>;
-  refreshAllSubscriptions: () => Promise<void>;
-  refreshSingleSubscription: (index: number) => Promise<void>;
-  forceReloadSubscriptions: (
-    subscriptions: SubscriptionEntity[] | null
-  ) => Promise<void>; // <-- Add this line
-};
+  addSubscription(sub: SubscriptionEntity): Promise<void>;
+  updateSubscription(index: number, sub: SubscriptionEntity): Promise<void>;
+  deleteSubscription(index: number): Promise<void>;
+  refreshAllSubscriptions(): Promise<void>;
+  refreshSingleSubscription(index: number): Promise<void>;
 
-// -------------------------
-// Context Setup
-// -------------------------
+  /* Utilidades */
+  forceReloadSubscriptions(subs: SubscriptionEntity[] | null): Promise<void>;
+
+  /* Firebase */
+  firebaseSubscriptions: SubscriptionEntity[];
+  isFirebaseLoaded: boolean;
+  loadSubscriptionsFromFirebase(): Promise<SubscriptionEntity[]>;
+  saveSubscriptionsToFirebase(subs: SubscriptionEntity[]): Promise<void>;
+  deleteSubscriptionFirebase(index: number): Promise<void>;
+  updateSubscriptionFirebase(
+    index: number,
+    sub: SubscriptionEntity
+  ): Promise<void>;
+  refreshSingleFirebaseSubscription(index: number): Promise<void>;
+  refreshAllFirebaseSubscriptions(): Promise<void>;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Creación del contexto
+─────────────────────────────────────────────────────────── */
 const SubscriptionContext = createContext<SubscriptionContextType>(
   {} as SubscriptionContextType
 );
 
-// -------------------------
-// Provider Component
-// -------------------------
+/* ──────────────────────────────────────────────────────────
+   Provider
+─────────────────────────────────────────────────────────── */
 export const SubscriptionProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  const [needsRefresh, setNeedsRefresh] = useState(false); // Add refresh trigger
+  /* ---------- estado local ---------- */
   const [subscriptions, setSubscriptions] = useState<SubscriptionEntity[]>([]);
-  const [region, setRegion] = useState("CO"); // Default region
+  const [needsRefresh, setNeedsRefresh] = useState(false);
+  const [region, setRegion] = useState("CO");
 
-  // Load initial subscriptions & region
+  /* ---------- estado Firebase ---------- */
+  const [firebaseSubscriptions, setFirebaseSubscriptions] = useState<
+    SubscriptionEntity[]
+  >([]);
+  const [isFirebaseLoaded, setIsFirebaseLoaded] = useState(false);
+
+  /* ── 1. Cargar datos locales al montar ── */
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -56,102 +85,189 @@ export const SubscriptionProvider: React.FC<{ children: ReactNode }> = ({
           AsyncStorage.getItem("subscriptions"),
           AsyncStorage.getItem("region"),
         ]);
-        console.log('storedSubs',storedSubs);
-        
         if (storedSubs) setSubscriptions(JSON.parse(storedSubs));
         if (storedRegion) setRegion(storedRegion);
-      } catch (error) {
-        console.error("Error loading data:", error);
+      } catch (err) {
+        console.error("Error loading local data:", err);
       }
     };
-
     loadData();
   }, []);
 
-  // Save to AsyncStorage and update state
+  /* ── 2. Helper para guardar en AsyncStorage ── */
   const saveSubscriptions = async (subs: SubscriptionEntity[]) => {
     await AsyncStorage.setItem("subscriptions", JSON.stringify(subs));
     setSubscriptions(subs);
-    setNeedsRefresh(!needsRefresh); // Toggle to trigger updates
+    setNeedsRefresh((prev) => !prev); // trigger renders
   };
 
-  const forceReloadSubscriptions = async (
-    subscriptions: SubscriptionEntity[] | null
-  ) => {
+  /* ──────────────────────────────────────────────────────────
+     Funciones Firebase
+  ─────────────────────────────────────────────────────────── */
+  const loadSubscriptionsFromFirebase = async (): Promise<
+    SubscriptionEntity[]
+  > => {
     try {
-      if (subscriptions) {
-        setSubscriptions(subscriptions);
-      } else {
-        const storedSubs = await AsyncStorage.getItem("subscriptions");
-        if (storedSubs) setSubscriptions(JSON.parse(storedSubs));
+      const ref = doc(db, FIREBASE_COLLECTION, FIREBASE_DOCUMENT_ID);
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data?.subscriptions) {
+          const parsed = JSON.parse(data.subscriptions) as SubscriptionEntity[];
+          setFirebaseSubscriptions(parsed);
+          setIsFirebaseLoaded(true);
+          return parsed;
+        }
       }
-    } catch (error) {
-      console.error("Force reload failed:", error);
+      return [];
+    } catch (err) {
+      console.error("Error loading from Firebase:", err);
+      setIsFirebaseLoaded(false);
+      return [];
     }
   };
 
-  // Date format depending on region
+  const saveSubscriptionsToFirebase = async (subs: SubscriptionEntity[]) => {
+    try {
+      const ref = doc(db, FIREBASE_COLLECTION, FIREBASE_DOCUMENT_ID);
+      await setDoc(ref, {
+        subscriptions: JSON.stringify(subs),
+        lastUpdated: new Date(),
+      });
+      setFirebaseSubscriptions(subs);
+    } catch (err) {
+      console.error("Error saving to Firebase:", err);
+    }
+  };
+
+  /*  Se ejecuta una sola vez para crear el doc si no existe y luego cargar */
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const ref = doc(db, FIREBASE_COLLECTION, FIREBASE_DOCUMENT_ID);
+        const snap = await getDoc(ref);
+        if (!snap.exists()) await saveSubscriptionsToFirebase(subscriptions);
+        await loadSubscriptionsFromFirebase();
+      } catch (err) {
+        console.error("Error initializing Firebase:", err);
+      }
+    };
+    init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ---------- CRUD Firebase ---------- */
+  const deleteSubscriptionFirebase = async (index: number) => {
+    const updated = firebaseSubscriptions.filter((_, i) => i !== index);
+    await saveSubscriptionsToFirebase(updated);
+  };
+
+  const updateSubscriptionFirebase = async (
+    index: number,
+    sub: SubscriptionEntity
+  ) => {
+    if (index < 0 || index >= firebaseSubscriptions.length) return;
+    const updated = firebaseSubscriptions.map((s, i) =>
+      i === index ? sub : s
+    );
+    await saveSubscriptionsToFirebase(updated);
+  };
+
+  const refreshSingleFirebaseSubscription = async (index: number) => {
+    if (index < 0 || index >= firebaseSubscriptions.length) return;
+    const updatedSub = await refreshSubscription(firebaseSubscriptions[index]);
+    const updated = firebaseSubscriptions.map((s, i) =>
+      i === index ? updatedSub : s
+    );
+    await saveSubscriptionsToFirebase(updated);
+  };
+
+  const refreshAllFirebaseSubscriptions = async () => {
+    const updated = await Promise.all(
+      firebaseSubscriptions.map(refreshSubscription)
+    );
+    await saveSubscriptionsToFirebase(updated);
+  };
+
+  /* ──────────────────────────────────────────────────────────
+     Funciones originales (local)
+  ─────────────────────────────────────────────────────────── */
+  const forceReloadSubscriptions = async (
+    subs: SubscriptionEntity[] | null
+  ) => {
+    try {
+      if (subs) {
+        setSubscriptions(subs);
+      } else {
+        const stored = await AsyncStorage.getItem("subscriptions");
+        if (stored) setSubscriptions(JSON.parse(stored));
+      }
+    } catch (err) {
+      console.error("Force reload failed:", err);
+    }
+  };
+
   const getDateFormat = () => (region === "CO" ? "dd/MM/yyyy" : "MM/dd/yyyy");
 
-  // Refresh a single subscription's dates (if outdated)
   const refreshSubscription = async (
     sub: SubscriptionEntity
   ): Promise<SubscriptionEntity> => {
-    const dateFormat = getDateFormat();
-    const nextPaymentDate = startOfDay(
-      parse(sub.nextPayment, dateFormat, new Date())
-    );
+    const fmt = getDateFormat();
+    const next = startOfDay(parse(sub.nextPayment, fmt, new Date()));
     const today = startOfDay(new Date());
+    if (!isThisMonth(next) || differenceInDays(next, today) >= 0) return sub;
 
-    if (!isThisMonth(nextPaymentDate)) return sub;
-
-    if (differenceInDays(nextPaymentDate, today) < 0) {
-      const newLastPayment = nextPaymentDate;
-      const newNextPayment = startOfDay(addMonths(newLastPayment, 1));
-
-      return {
-        ...sub,
-        lastPayment: format(newLastPayment, dateFormat),
-        nextPayment: format(newNextPayment, dateFormat),
-      };
-    }
-
-    return sub;
+    const newLast = next;
+    const newNext = startOfDay(addMonths(newLast, 1));
+    return {
+      ...sub,
+      lastPayment: format(newLast, fmt),
+      nextPayment: format(newNext, fmt),
+    };
   };
 
-  // Context Values
+  /* ──────────────────────────────────────────────────────────
+     contextValue
+  ─────────────────────────────────────────────────────────── */
   const contextValue: SubscriptionContextType = {
+    /* Local */
     subscriptions,
-    forceReloadSubscriptions,
     addSubscription: async (sub) => {
       const updated = [...subscriptions, sub];
       await saveSubscriptions(updated);
     },
-
     updateSubscription: async (index, sub) => {
       if (index < 0 || index >= subscriptions.length) return;
-
       const updated = subscriptions.map((s, i) => (i === index ? sub : s));
       await saveSubscriptions(updated);
     },
-
     deleteSubscription: async (index) => {
       const updated = subscriptions.filter((_, i) => i !== index);
       await saveSubscriptions(updated);
     },
-
     refreshAllSubscriptions: async () => {
       const updated = await Promise.all(subscriptions.map(refreshSubscription));
       await saveSubscriptions(updated);
     },
-
     refreshSingleSubscription: async (index) => {
       if (index < 0 || index >= subscriptions.length) return;
-
       const updated = [...subscriptions];
       updated[index] = await refreshSubscription(updated[index]);
       await saveSubscriptions(updated);
     },
+
+    /* Util */
+    forceReloadSubscriptions,
+
+    /* Firebase */
+    firebaseSubscriptions,
+    isFirebaseLoaded,
+    loadSubscriptionsFromFirebase,
+    saveSubscriptionsToFirebase,
+    deleteSubscriptionFirebase,
+    updateSubscriptionFirebase,
+    refreshSingleFirebaseSubscription,
+    refreshAllFirebaseSubscriptions,
   };
 
   return (
@@ -161,7 +277,7 @@ export const SubscriptionProvider: React.FC<{ children: ReactNode }> = ({
   );
 };
 
-// -------------------------
-// Hook to Consume Context
-// -------------------------
+/* ──────────────────────────────────────────────────────────
+   Hook
+─────────────────────────────────────────────────────────── */
 export const useSubscriptions = () => useContext(SubscriptionContext);

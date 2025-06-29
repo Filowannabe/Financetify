@@ -22,13 +22,26 @@ import { useAppTheme } from "../../themes";
 import { useSettings } from "../../settings";
 import { useSubscriptions } from "./SubscriptionContext";
 
-export const ListScreen = ({ navigation }: any) => {
+export const ListScreen = ({ navigation, route }: any) => {
   const { theme } = useAppTheme();
   const { language, region } = useSettings();
   const {
+    /* Local & Firebase */
     subscriptions,
-    forceReloadSubscriptions,
+    firebaseSubscriptions,
+    isFirebaseLoaded,
+    /* CRUD */
     deleteSubscription,
+    deleteSubscriptionFirebase,
+    /* Refresh */
+    refreshAllSubscriptions,
+    refreshAllFirebaseSubscriptions,
+    refreshSingleSubscription,
+    refreshSingleFirebaseSubscription,
+    /* Util */
+    forceReloadSubscriptions,
+    loadSubscriptionsFromFirebase,
+    saveSubscriptionsToFirebase,
   } = useSubscriptions();
   const [filteredSubscriptions, setFilteredSubscriptions] = useState<
     SubscriptionEntity[]
@@ -37,11 +50,102 @@ export const ListScreen = ({ navigation }: any) => {
   const [filterCurrentMonth, setFilterCurrentMonth] = useState(false);
   const [visibleSnackbar, setVisibleSnackbar] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
+  // Nuevo estado para controlar qué datos mostrar
+  const [showFirebaseData, setShowFirebaseData] = useState<boolean>(
+    route.params?.defaultToFirebase ?? false
+  );
 
   const dateFormat = region === "CO" ? "dd/MM/yyyy" : "MM/dd/yyyy";
   const parseDate = (dateString: string) =>
     startOfDay(parse(dateString, dateFormat, new Date()));
-  const formatDate = (date: Date) => format(date, dateFormat);
+  useEffect(() => {
+    if (route.params?.defaultToFirebase !== undefined) {
+      setShowFirebaseData(route.params.defaultToFirebase);
+    }
+  }, [route.params?.defaultToFirebase]);
+
+  /* ────────────────────────────────────────────────
+     NUEVA función: copiar a Firebase
+  ──────────────────────────────────────────────── */
+  const handleCopyToFirebase = async () => {
+    // Evitar copiar si aún no se han cargado datos de Firebase
+    if (!isFirebaseLoaded) {
+      setSnackbarMessage(
+        language === "es"
+          ? "Firestore aún no está listo"
+          : "Firebase not ready yet"
+      );
+      setVisibleSnackbar(true);
+      return;
+    }
+
+    // Nombres que ya existen en Firebase (case‑insensitive)
+    const existing = new Set(
+      firebaseSubscriptions.map((s) => s.name.toLowerCase())
+    );
+
+    // Sólo las locales que NO existen
+    const toAdd = subscriptions.filter(
+      (s) => !existing.has(s.name.toLowerCase())
+    );
+
+    if (toAdd.length === 0) {
+      setSnackbarMessage(
+        language === "es"
+          ? "No hay suscripciones nuevas para copiar"
+          : "No new subscriptions to copy"
+      );
+      setVisibleSnackbar(true);
+      return;
+    }
+
+    // Guardar la lista combinada en Firestore
+    await saveSubscriptionsToFirebase([...firebaseSubscriptions, ...toAdd]);
+    await loadSubscriptionsFromFirebase(); // refresca estado
+
+    setSnackbarMessage(
+      language === "es"
+        ? `Copiadas ${toAdd.length} suscripciones a Firebase`
+        : `Copied ${toAdd.length} subscriptions to Firebase`
+    );
+    setVisibleSnackbar(true);
+  };
+
+  // ────────────────────────────────────────────────
+  // NUEVA función: copiar desde Firebase a Local
+  // ────────────────────────────────────────────────
+  const handleCopyToLocal = async () => {
+    const existing = new Set(subscriptions.map((s) => s.name.toLowerCase()));
+
+    const toAdd = firebaseSubscriptions.filter(
+      (s) => !existing.has(s.name.toLowerCase())
+    );
+
+    if (toAdd.length === 0) {
+      setSnackbarMessage(
+        language === "es"
+          ? "No hay suscripciones nuevas para copiar"
+          : "No new subscriptions to copy"
+      );
+      setVisibleSnackbar(true);
+      return;
+    }
+
+    const updated = [...subscriptions, ...toAdd];
+    await AsyncStorage.setItem("subscriptions", JSON.stringify(updated));
+    await forceReloadSubscriptions(null);
+
+    setSnackbarMessage(
+      language === "es"
+        ? `Copiadas ${toAdd.length} suscripciones a Local`
+        : `Copied ${toAdd.length} subscriptions to Local`
+    );
+    setVisibleSnackbar(true);
+  };
+
+  // -------------------------
+  // Funciones locales originales (SIN CAMBIOS)
+  // -------------------------
 
   // Original load function
   useEffect(() => {
@@ -61,7 +165,9 @@ export const ListScreen = ({ navigation }: any) => {
 
   // Original filter effect
   useEffect(() => {
-    const filtered = subscriptions.filter((sub) => {
+    const dataSource = showFirebaseData ? firebaseSubscriptions : subscriptions;
+
+    const filtered = dataSource.filter((sub) => {
       if (
         searchQuery &&
         !sub.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -70,74 +176,73 @@ export const ListScreen = ({ navigation }: any) => {
       if (filterCurrentMonth) return isThisMonth(parseDate(sub.nextPayment));
       return true;
     });
+
     setFilteredSubscriptions(filtered);
-  }, [subscriptions, searchQuery, filterCurrentMonth]);
+  }, [
+    subscriptions,
+    firebaseSubscriptions,
+    showFirebaseData,
+    searchQuery,
+    filterCurrentMonth,
+  ]);
 
   // Original refresh all
   const handleRefreshSubscriptions = async () => {
-    await forceReloadSubscriptions(null);
-    const updated = await Promise.all(
-      subscriptions.map(async (sub) => {
-        const nextPaymentDate = parseDate(sub.nextPayment);
-        if (!isValid(nextPaymentDate)) return sub;
+    if (showFirebaseData) {
+      await refreshAllFirebaseSubscriptions(); // actualiza en Firestore
+      await loadSubscriptionsFromFirebase(); // vuelve a traer datos
+    } else {
+      await refreshAllSubscriptions(); // lógica original local
+      await forceReloadSubscriptions(null); // recarga desde storage
+    }
 
-        const today = startOfDay(new Date());
-        if (differenceInDays(nextPaymentDate, today) < 0) {
-          const newLastPayment = nextPaymentDate;
-          const newNextPayment = startOfDay(addMonths(newLastPayment, 1));
-          return {
-            ...sub,
-            lastPayment: formatDate(newLastPayment),
-            nextPayment: formatDate(newNextPayment),
-          };
-        }
-        return sub;
-      })
+    setSnackbarMessage(
+      language === "es"
+        ? "Suscripciones actualizadas"
+        : "Subscriptions refreshed"
     );
-    forceReloadSubscriptions(updated);
-    await AsyncStorage.setItem("subscriptions", JSON.stringify(updated));
+    setVisibleSnackbar(true);
   };
 
   // Original delete function
   const handleDeleteSubscription = async (index: number) => {
-    await deleteSubscription(index);
+    if (showFirebaseData) {
+      await deleteSubscriptionFirebase(index);
+      await loadSubscriptionsFromFirebase(); // Refresca local
+    } else {
+      await deleteSubscription(index);
+      await forceReloadSubscriptions(null);
+    }
+
     setSnackbarMessage(language === "es" ? "Eliminada" : "Deleted");
     setVisibleSnackbar(true);
-    await forceReloadSubscriptions(null);
   };
 
   // Original modify function
   const handleModifySubscription = (index: number) => {
-    navigation.navigate("Form", {
-      subscription: subscriptions[index],
-      index,
+    navigation.navigate("Subscriptions2", {
+      screen: "Form",
+      params: {
+        subscription: showFirebaseData
+          ? firebaseSubscriptions[index]
+          : subscriptions[index],
+        index,
+        fromFirebase: showFirebaseData,
+      },
     });
   };
 
   // Original refresh single
   const handleRefreshIndividualSubscription = async (index: number) => {
-    const updated = await Promise.all(
-      subscriptions.map(async (sub, i) => {
-        if (i !== index) return sub;
-
-        const nextPaymentDate = parseDate(sub.nextPayment);
-        if (!isValid(nextPaymentDate)) return sub;
-
-        const today = startOfDay(new Date());
-        if (differenceInDays(nextPaymentDate, today) < 0) {
-          const newLastPayment = nextPaymentDate;
-          const newNextPayment = startOfDay(addMonths(newLastPayment, 1));
-          return {
-            ...sub,
-            lastPayment: formatDate(newLastPayment),
-            nextPayment: formatDate(newNextPayment),
-          };
-        }
-        return sub;
-      })
-    );
-    forceReloadSubscriptions(updated);
-    await AsyncStorage.setItem("subscriptions", JSON.stringify(updated));
+    if (showFirebaseData) {
+      // ➤ Sólo Firestore
+      await refreshSingleFirebaseSubscription(index); // actualiza en la nube
+      await loadSubscriptionsFromFirebase(); // refresca estado local
+    } else {
+      // ➤ Sólo AsyncStorage
+      await refreshSingleSubscription(index); // usa la lógica original
+      await forceReloadSubscriptions(null); // recarga desde storage
+    }
   };
 
   // Original amount formatting
@@ -254,7 +359,9 @@ export const ListScreen = ({ navigation }: any) => {
 
   // Original totals calculation
   const calculateTotals = () => {
-    return subscriptions.reduce(
+    const dataSource = showFirebaseData ? firebaseSubscriptions : subscriptions;
+
+    return dataSource.reduce(
       (acc, sub) => {
         const isCurrent = isThisMonth(parseDate(sub.nextPayment));
         if (isCurrent) acc.currentMonthTotal += sub.amount;
@@ -267,6 +374,35 @@ export const ListScreen = ({ navigation }: any) => {
 
   const { currentMonthTotal, total } = calculateTotals();
 
+  // -------------------------
+  // Nuevas funciones para Firebase (NO MODIFICAN LAS ORIGINALES)
+  // -------------------------
+
+  const handleLoadFromFirebase = async () => {
+    await loadSubscriptionsFromFirebase();
+    setShowFirebaseData(true);
+    setSnackbarMessage(
+      language === "es"
+        ? "Datos cargados desde Firebase"
+        : "Data loaded from Firebase"
+    );
+    setVisibleSnackbar(true);
+  };
+
+  const handleToggleDataSource = () => {
+    setShowFirebaseData(!showFirebaseData);
+    setSnackbarMessage(
+      showFirebaseData
+        ? language === "es"
+          ? "Mostrando datos locales"
+          : "Showing local data"
+        : language === "es"
+        ? "Mostrando datos de Firebase"
+        : "Showing Firebase data"
+    );
+    setVisibleSnackbar(true);
+  };
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View
@@ -276,6 +412,55 @@ export const ListScreen = ({ navigation }: any) => {
           backgroundColor: theme.colors.background,
         }}
       >
+        {/* ─────── Fila de botones superior ─────── */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            marginBottom: 10,
+          }}
+        >
+          {/* SOLO cuando se ven datos locales: Copiar a Firebase */}
+          {!showFirebaseData && (
+            <Button
+              mode="outlined"
+              onPress={handleCopyToFirebase}
+              style={{ flex: 1, marginRight: 5 }}
+              disabled={!isFirebaseLoaded}
+              labelStyle={{ color: theme.colors.text }}
+            >
+              {language === "es" ? "Copiar a Firebase" : "Copy to Firebase"}
+            </Button>
+          )}
+
+          {/* SOLO cuando se ven datos de Firebase: Copiar a Local */}
+          {showFirebaseData && (
+            <Button
+              mode="outlined"
+              onPress={handleCopyToLocal}
+              style={{ flex: 1, marginRight: 5 }}
+              labelStyle={{ color: theme.colors.text }}
+            >
+              {language === "es" ? "Copiar a Local" : "Copy to Local"}
+            </Button>
+          )}
+
+          <Button
+            mode="outlined"
+            onPress={handleToggleDataSource}
+            style={{ flex: 1, marginLeft: 5 }}
+            labelStyle={{ color: theme.colors.text }}
+          >
+            {showFirebaseData
+              ? language === "es"
+                ? "Ver Locales"
+                : "View Local"
+              : language === "es"
+              ? "Ver Firebase"
+              : "View Firebase"}
+          </Button>
+        </View>
+
         <Button
           mode="contained"
           onPress={handleRefreshSubscriptions}
@@ -311,6 +496,23 @@ export const ListScreen = ({ navigation }: any) => {
         </Button>
 
         <View style={{ marginBottom: 20 }}>
+          <Text
+            style={{
+              fontWeight: "bold",
+              fontSize: 18,
+              color: theme.colors.text,
+            }}
+          >
+            {language === "es" ? "Origen:" : "Source:"}{" "}
+            {showFirebaseData
+              ? language === "es"
+                ? "Firebase"
+                : "Firebase"
+              : language === "es"
+              ? "Local"
+              : "Local"}
+          </Text>
+
           <Text
             style={{
               fontWeight: "bold",
