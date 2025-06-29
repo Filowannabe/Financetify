@@ -1,4 +1,4 @@
-# 📆 Incomes Calculator — React Native (Expo + Firebase)
+# 📆 Financetify — Incomes Calculator — React Native (Expo + Firebase)
 
 A subscription‑tracking mobile app with **offline** (AsyncStorage) and **online** (Cloud Firestore) storage.  
 Create, edit, delete, import/export CSV, and sync data between local and cloud.
