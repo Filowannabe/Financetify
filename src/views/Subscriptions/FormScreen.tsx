@@ -10,6 +10,7 @@ import { useAppTheme } from "../../themes";
 import { useSettings } from "../../settings";
 import { useSubscriptions } from "./SubscriptionContext";
 import { SubscriptionEntity } from "../../types/SubscriptionTypes";
+import { AppStackNavigation } from "../../types/navigation";
 
 interface RouteParams {
   index?: number;
@@ -25,7 +26,7 @@ interface FormScreenProps {
 export const FormScreen = ({ route }: FormScreenProps) => {
   const { theme } = useAppTheme();
   const { language, region } = useSettings();
-  const navigation = useNavigation();
+  const navigation = useNavigation<AppStackNavigation<"Form">["navigation"]>();
   const {
     subscriptions,
     addSubscription,
@@ -73,11 +74,13 @@ export const FormScreen = ({ route }: FormScreenProps) => {
 
       if (route.params?.index !== undefined) {
         await updateSubscription(route.params.index, subscription);
+        await forceReloadSubscriptions(null);
+        navigation.navigate("List");
       } else {
         await addSubscription(subscription);
+        await forceReloadSubscriptions(null);
+        navigation.navigate("Subscriptions2");
       }
-      await forceReloadSubscriptions();
-      navigation.goBack();
     } catch (error) {
       setSnackbarMessage(language === "es" ? "Error al guardar" : "Save error");
       setVisibleSnackbar(true);
@@ -225,7 +228,6 @@ export const FormScreen = ({ route }: FormScreenProps) => {
         <Button
           mode="contained"
           onPress={() => {
-            console.log("zzz");
             handleSubmit();
           }}
           style={{ marginVertical: 10 }}

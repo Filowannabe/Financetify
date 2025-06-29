@@ -27,7 +27,7 @@ export const ListScreen = ({ navigation }: any) => {
   const { language, region } = useSettings();
   const {
     subscriptions,
-    forceReloadSubscriptions, // Get the reload function
+    forceReloadSubscriptions,
     deleteSubscription,
   } = useSubscriptions();
   const [filteredSubscriptions, setFilteredSubscriptions] = useState<
@@ -75,7 +75,7 @@ export const ListScreen = ({ navigation }: any) => {
 
   // Original refresh all
   const handleRefreshSubscriptions = async () => {
-    await forceReloadSubscriptions();
+    await forceReloadSubscriptions(null);
     const updated = await Promise.all(
       subscriptions.map(async (sub) => {
         const nextPaymentDate = parseDate(sub.nextPayment);
@@ -94,7 +94,7 @@ export const ListScreen = ({ navigation }: any) => {
         return sub;
       })
     );
-
+    forceReloadSubscriptions(updated);
     await AsyncStorage.setItem("subscriptions", JSON.stringify(updated));
   };
 
@@ -103,7 +103,7 @@ export const ListScreen = ({ navigation }: any) => {
     await deleteSubscription(index);
     setSnackbarMessage(language === "es" ? "Eliminada" : "Deleted");
     setVisibleSnackbar(true);
-    await forceReloadSubscriptions();
+    await forceReloadSubscriptions(null);
   };
 
   // Original modify function
@@ -136,7 +136,7 @@ export const ListScreen = ({ navigation }: any) => {
         return sub;
       })
     );
-
+    forceReloadSubscriptions(updated);
     await AsyncStorage.setItem("subscriptions", JSON.stringify(updated));
   };
 

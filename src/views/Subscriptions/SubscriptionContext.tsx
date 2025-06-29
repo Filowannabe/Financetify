@@ -26,7 +26,9 @@ type SubscriptionContextType = {
   deleteSubscription: (index: number) => Promise<void>;
   refreshAllSubscriptions: () => Promise<void>;
   refreshSingleSubscription: (index: number) => Promise<void>;
-  forceReloadSubscriptions: () => Promise<void>; // <-- Add this line
+  forceReloadSubscriptions: (
+    subscriptions: SubscriptionEntity[] | null
+  ) => Promise<void>; // <-- Add this line
 };
 
 // -------------------------
@@ -54,7 +56,8 @@ export const SubscriptionProvider: React.FC<{ children: ReactNode }> = ({
           AsyncStorage.getItem("subscriptions"),
           AsyncStorage.getItem("region"),
         ]);
-
+        console.log('storedSubs',storedSubs);
+        
         if (storedSubs) setSubscriptions(JSON.parse(storedSubs));
         if (storedRegion) setRegion(storedRegion);
       } catch (error) {
@@ -72,10 +75,16 @@ export const SubscriptionProvider: React.FC<{ children: ReactNode }> = ({
     setNeedsRefresh(!needsRefresh); // Toggle to trigger updates
   };
 
-  const forceReloadSubscriptions = async () => {
+  const forceReloadSubscriptions = async (
+    subscriptions: SubscriptionEntity[] | null
+  ) => {
     try {
-      const storedSubs = await AsyncStorage.getItem("subscriptions");
-      if (storedSubs) setSubscriptions(JSON.parse(storedSubs));
+      if (subscriptions) {
+        setSubscriptions(subscriptions);
+      } else {
+        const storedSubs = await AsyncStorage.getItem("subscriptions");
+        if (storedSubs) setSubscriptions(JSON.parse(storedSubs));
+      }
     } catch (error) {
       console.error("Force reload failed:", error);
     }

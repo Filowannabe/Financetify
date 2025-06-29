@@ -2,21 +2,38 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import React from "react";
 import { Icon } from "react-native-paper";
 import { HomeScreen } from "./views/Home/HomeScreen";
-import { SubscriptionsScreen } from "./views/Subscriptions/SubscriptionsScreen";
 import { SettingsScreen } from "./views/Settings/SettingsScreen";
 import { useAppTheme } from "./themes";
 import { createStackNavigator } from "@react-navigation/stack";
 import { ListScreen } from "./views/Subscriptions/ListScreen";
 import { FormScreen } from "./views/Subscriptions/FormScreen";
-const SubscriptionStack = createStackNavigator();
+import type { AppStackParamList, RootTabParamList } from "./types/navigation";
 
-const SubscriptionNavigator = () => (
-  <SubscriptionStack.Navigator>
-    <SubscriptionStack.Screen name="List" component={ListScreen} />
-    <SubscriptionStack.Screen name="Form" component={FormScreen} />
-  </SubscriptionStack.Navigator>
-);
-const Tab = createBottomTabNavigator();
+// Typed stack navigator
+const SubscriptionStack = createStackNavigator<AppStackParamList>();
+
+const SubscriptionNavigator = () => {
+  const { theme } = useAppTheme();
+  return (
+    <SubscriptionStack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: theme.colors.surface,
+          height:0
+        },
+        headerTitleStyle: {
+          color: theme.colors.text,
+        },
+      }}
+    >
+      <SubscriptionStack.Screen name="List" component={ListScreen} />
+      <SubscriptionStack.Screen name="Form" component={FormScreen} />
+    </SubscriptionStack.Navigator>
+  );
+};
+
+// Typed tab navigator
+const Tab = createBottomTabNavigator<RootTabParamList>();
 
 export const IncomesCalculator = () => {
   const { theme } = useAppTheme();
@@ -30,13 +47,16 @@ export const IncomesCalculator = () => {
             case "Home":
               iconName = focused ? "home" : "home-outline";
               break;
-            case "Subscriptions":
-              iconName = focused
-                ? "format-list-bulleted"
-                : "format-list-bulleted";
+            case "SubscriptionsForm":
+              iconName = focused ? "plus-circle" : "plus-circle-outline";
               break;
             case "Settings":
               iconName = focused ? "cog" : "cog-outline";
+              break;
+            case "Subscriptions2":
+              iconName = focused
+                ? "format-list-bulleted"
+                : "format-list-bulleted";
               break;
             default:
               iconName = "alert";
@@ -65,19 +85,19 @@ export const IncomesCalculator = () => {
         options={{ title: "Home" }}
       />
       <Tab.Screen
-        name="Subscriptions"
-        component={SubscriptionsScreen}
+        name="SubscriptionsForm"
+        component={FormScreen}
+        options={{ title: "Create Subscription" }}
+      />
+      <Tab.Screen
+        name="Subscriptions2"
+        component={SubscriptionNavigator}
         options={{ title: "Subscriptions" }}
       />
       <Tab.Screen
         name="Settings"
         component={SettingsScreen}
         options={{ title: "Settings" }}
-      />
-      <Tab.Screen
-        name="Subscriptions2"
-        component={SubscriptionNavigator}
-        options={{ headerShown: false }}
       />
     </Tab.Navigator>
   );
