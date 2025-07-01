@@ -1,42 +1,78 @@
-# 📆 Financetify — Incomes Calculator — React Native (Expo + Firebase)
+# 📆 Financetify — Incomes Calculator
 
-A subscription‑tracking mobile app with **offline** (AsyncStorage) and **online** (Cloud Firestore) storage.  
-Create, edit, delete, import/export CSV, and sync data between local and cloud.
+_React Native (Expo) + Firebase + AsyncStorage_
+
+Track your income and subscriptions with **local** (offline) and **cloud** (online) support.
 
 ---
 
-## ✨ Features
+## 🧰 Tech Stack
 
-| Local (AsyncStorage) | Firebase (Firestore) | UI |
-|----------------------|----------------------|----|
-| Full CRUD            | Full CRUD            | React Native Paper |
-| CSV export / import  | Copy Local → Cloud   | Bottom Tabs |
-|                      | Copy Cloud → Local   | Dark mode |
-| Offline persistence  | Auto‑refresh on focus | Material icons |
+| Area          | Tool                         |
+| ------------- | ---------------------------- |
+| Frontend      | React Native + Expo          |
+| Design System | React Native Paper           |
+| Local Storage | AsyncStorage                 |
+| Cloud Storage | Firebase Firestore           |
+| State Mgmt    | React Context                |
+| Dev Tools     | TypeScript, ESLint, Prettier |
 
+---
 
-## 🚀 Quick Start
+## ✨ Features
+
+### 📦 Local (AsyncStorage)
+
+- Full CRUD (Create, Read, Update, Delete)
+- CSV Import / Export
+- Works offline by default
+
+### ☁️ Cloud (Firestore)
+
+- Full CRUD synced with Firebase
+- Copy data from/to local
+- Realtime updates from the cloud
+
+### 🎨 UI / UX
+
+- Bottom Tab Navigation
+- Dark Mode Support
+- Material Icons
+- Error Handling and Snackbar Notifications
+
+---
+
+## 🚀 Getting Started
+
+### 1. Clone and Install
 
 ```bash
-git clone https://github.com/USERNAME/incomes-calculator.git
+git clone https://github.com/YOUR_USERNAME/incomes-calculator.git
 cd incomes-calculator
-
-yarn            # or npm install
-
-cp .env.example .env
-cp .env.example .env.local   # fill in Firebase keys
-
-npx expo start -c
+npm install
+# or yarn
 ```
+
+### 2. Start the App
+
+| Command             | Description                                             |
+| ------------------- | ------------------------------------------------------- |
+| `npx expo start`    | Run app in development mode                             |
+| `npx expo start -c` | Start with cache reset (use after .env or config edits) |
 
 ---
 
-## 🔑 Firebase Setup
+## 🔐 Firebase Setup
 
-1. Open **Firebase Console** → create project → enable **Cloud Firestore**  
-2. Get your Web app keys and place them in `.env` / `.env.local`:
+### 1. Create Firebase Project
 
-```
+- Go to [Firebase Console](https://console.firebase.google.com/)
+- Create a project and enable **Cloud Firestore**
+- Add a **Web App** and copy config keys
+
+### 2. Add to `.env` file
+
+```env
 FIREBASE_API_KEY=AIzaSy...
 FIREBASE_AUTH_DOMAIN=my-app.firebaseapp.com
 FIREBASE_PROJECT_ID=my-app
@@ -45,13 +81,13 @@ FIREBASE_MESSAGING_SENDER_ID=1234567890
 FIREBASE_APP_ID=1:1234567890:web:abcdef654321
 ```
 
-3. Temporary open rules for testing:
+### 3. Set Firestore Rules (dev only)
 
-```
+```firestore
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{db}/documents {
-    match /{doc=**} {
+  match /databases/{database}/documents {
+    match /{document=**} {
       allow read, write: if true;
     }
   }
@@ -60,24 +96,27 @@ service cloud.firestore {
 
 ---
 
-## ⚙️ Environment Variables (`react-native-dotenv`)
+## ⚙️ Environment Config (Dotenv)
 
-*babel.config.js*
+### babel.config.js
 
 ```js
 plugins: [
-  ['module:react-native-dotenv', {
-    moduleName: '@env',
-    path: '.env',
-    allowUndefined: true,
-  }],
-]
+  [
+    "module:react-native-dotenv",
+    {
+      moduleName: "@env",
+      path: ".env",
+      allowUndefined: false,
+    },
+  ],
+];
 ```
 
-*env.d.ts*
+### env.d.ts
 
 ```ts
-declare module '@env' {
+declare module "@env" {
   export const FIREBASE_API_KEY: string;
   export const FIREBASE_AUTH_DOMAIN: string;
   export const FIREBASE_PROJECT_ID: string;
@@ -89,95 +128,41 @@ declare module '@env' {
 
 ---
 
-## 🔄 Sync Workflow
+## 🔄 Data Sync Flow
 
-| Action                | Flow |
-|-----------------------|------|
-| Create/Edit **Local** | Save → AsyncStorage → context updates → List refreshes |
-| Create/Edit **Cloud** | Save → Firestore → `goBack()` → List auto‑reloads |
-| Copy Local → Cloud    | Adds non‑duplicate records|
-| Copy Cloud → Local    | Merges missing items locally |
-
----
-
-## 🏃‍♂️ Screen Overview
-
-| Screen               | Purpose |
-|----------------------|---------|
-| **Home**             | Welcome page |
-| **Create Subscription** | Quick add form (defaults to local) |
-| **Subscriptions**    | List, filters, sync buttons |
-| **Settings**         | Language, region, theme |
+| Action              | Result                                              |
+| ------------------- | --------------------------------------------------- |
+| Create/Edit (Local) | Save → AsyncStorage → update context → refresh list |
+| Create/Edit (Cloud) | Save → Firestore → goBack() → auto-refresh          |
+| Sync Local → Cloud  | Uploads missing items to Firebase                   |
+| Sync Cloud → Local  | Merges cloud items into local storage               |
 
 ---
 
-## 📦 Building & Installing on Real Devices (Expo EAS)
+## 🧭 Screens Overview
 
-> Prerequisites   
-> • Node ≥ 16  • Expo CLI • **EAS CLI** (`npm i -g eas-cli`) • Expo account (`eas login`)
-
-### 1 . Configure EAS
-
-```bash
-eas build:configure        # creates eas.json
-```
-
-Choose the platforms you plan to build (Android and/or iOS).
+| Screen Name             | Function                                     |
+| ----------------------- | -------------------------------------------- |
+| **Home**                | Welcome and quick summary                    |
+| **Create Subscription** | Adds a new subscription (defaults to local)  |
+| **Subscriptions**       | List with filters, local/cloud sync, CRUD UI |
+| **Settings**            | Change language, region, theme               |
 
 ---
 
-### 2 . Android Builds
+## 🧪 Test Firebase is Working
 
-| Goal | Command | Result |
-|------|---------|--------|
-| ⚡ Debug APK   | `eas build -p android --profile preview`     | `app-debug.apk` |
-| 🏪 Play Store  | `eas build -p android --profile production` | `app-release.aab` |
-
-After build completes, download the file from the console link.
-
-**Install APK on device**
-
-```bash
-adb install app-debug.apk   # enable USB‑debugging on phone
-```
+1. Add a subscription using the "Create Subscription" tab
+2. Use the sync button to send it to Firebase
+3. Modify it on another device or emulator
+4. Observe real-time updates in the Subscriptions list
 
 ---
 
-### 3 . iOS Builds (macOS + Xcode)
+## ✅ Requirements
 
-| Goal | Command | Result |
-|------|---------|--------|
-| ⚡ Ad Hoc / TestFlight | `eas build -p ios --profile preview`     | `.ipa` file |
-| 🏪 App Store          | `eas build -p ios --profile production` | uploaded to App Store Connect |
-
-- For Ad Hoc, download the `.ipa` and install via **Apple Configurator** or **TestFlight**.
+- Node.js ≥ 16
+- Expo CLI
+- Firebase Project (Cloud Firestore enabled)
 
 ---
-
-### 4 . Local Dev Builds (no EAS)
-
-```bash
-npx expo run:android   # debug on connected Android / emulator
-npx expo run:ios       # debug on iOS simulator (macOS)
-```
-
----
-
-### 🔐 Signing Tips
-
-| Platform | Notes |
-|----------|-------|
-| Android  | EAS auto‑generates a keystore on first production build — save the backup file! |
-| iOS      | Provide certificates yourself **or** let EAS manage them automatically. |
-
----
-
-## 🛡️ Production Checklist
-
-- Harden Firestore security rules before release  
-- Do **not** commit `.env` / `.env.local`  
-- Consider adding Firebase Auth for multi‑device sync  
-
----
-
-Happy coding & happy budgeting! 💸

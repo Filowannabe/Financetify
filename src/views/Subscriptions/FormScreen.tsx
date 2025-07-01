@@ -155,9 +155,14 @@ export const FormScreen = ({ route }: FormScreenProps) => {
   ──────────────────────────────────────────────────────────────────────── */
   const exportToCSV = async () => {
     try {
+      const source =
+        (isEdit && isFromFirebase) || (!isEdit && saveToFirebase)
+          ? firebaseSubscriptions
+          : subscriptions;
+
       const csvContent = [
         '"Name","Last Payment","Next Payment","Amount"',
-        ...subscriptions.map(
+        ...source.map(
           (sub) =>
             `"${sub.name}","${sub.lastPayment}","${sub.nextPayment}",${sub.amount}`
         ),
@@ -168,7 +173,7 @@ export const FormScreen = ({ route }: FormScreenProps) => {
       if (perms.granted) {
         const uri = await FileSystem.StorageAccessFramework.createFileAsync(
           perms.directoryUri,
-          `Subscriptions_${format(new Date(), "yyyyMMdd_HHmmss")}`,
+          `Subscriptions_${format(new Date(), "yyyyMMdd_HHmmss")}.csv`,
           "text/csv"
         );
         await FileSystem.writeAsStringAsync(uri, csvContent);
@@ -185,7 +190,7 @@ export const FormScreen = ({ route }: FormScreenProps) => {
     }
   };
 
-  const importFromCSV = async () => {
+  /*  const importFromCSV = async () => {
     try {
       const result: any = await DocumentPicker.getDocumentAsync({
         type: ["text/csv"],
@@ -221,7 +226,7 @@ export const FormScreen = ({ route }: FormScreenProps) => {
         language === "es" ? "Error al importar" : "Import failed"
       );
     }
-  };
+  }; */
 
   /* ────────────────────────────────────────────────────────────────────────
      UI
@@ -362,14 +367,14 @@ export const FormScreen = ({ route }: FormScreenProps) => {
             {language === "es" ? "Exportar CSV" : "Export CSV"}
           </Button>
 
-          <Button
+          {/*  <Button
             mode="contained"
             onPress={importFromCSV}
             style={{ flex: 1, marginLeft: 10 }}
             labelStyle={{ color: theme.colors.text }}
           >
             {language === "es" ? "Importar CSV" : "Import CSV"}
-          </Button>
+          </Button> */}
         </View>
 
         {/* Snackbar */}
